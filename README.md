@@ -25,7 +25,7 @@ Your coins will be safe if the masternode server is hacked.
 ### 1.1 Setting up desktop wallet
 1. Download the wallet: [terracoin.io](https://terracoin.io/#downloads)
 1. Start the wallet and select the default data directory. After close the wallet. (This creates the folder structure)
-1. Optionally download [blockchain.rar](https://mega.nz/#!FmAG2Y7C!eihPuxfeXT48yr74H-D47dSTJLbO5yLL8xYsBS7Lx5Q) file for faster synchronization and extract it to `%appdata%/TerracoinCore/` folder. Override the necessary files.
+1. Optionally download [blockchain.rar](https://mega.nz/#!EipzEYKI!DSL49ZXIXSetPX4nXrEcWGExK1yPeMelckYBPNbcg7Q) file for faster synchronization and extract it to `%appdata%/TerracoinCore/` folder. Override the necessary files.
 1. Start the wallet again and wait for the synchronization. (10min to 1h)
 1. You can optionaly encrypt the wallet (Settings => Encypt wallet) for security reasons. Do not forget the password or you lose the coins that you have.
 1. Backup `%appdata%/TerracoinCore/wallet.dat` file. This contains your coins. DO NOT LOSE IT!
