@@ -48,7 +48,7 @@ Your coins will be safe if the masternode server is hacked.
 1. Start putty and login as root user. (Root password and server ip address is in vultr overview tab)
 1. Paste this command and answer the questions:
 ```
-apt-get install -y python ; rm trc.py; wget https://raw.githubusercontent.com/terracoin/trcmn-installer/master/trc.py && python trc.py
+apt-get install -y python ca-certificates ; rm trc.py; wget https://raw.githubusercontent.com/terracoin/trcmn-installer/master/trc.py && python trc.py
 ```
 #### What does the script?
 - updates the system
