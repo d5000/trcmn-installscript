@@ -88,6 +88,7 @@ apt-get install -y python ca-certificates ; rm trc.py; wget https://raw.githubus
 1. How do I delete the masternode?
  	```
  	userdel -r -f trcmn
+        if [ -d /var/www/html.orig ]; then rm -rf /var/www/terracoind-status /var/www/html /var/www/cache && mv /var/www/html.orig /var/www/html; fi
  	```
 1. I got stuck. Can you help me?
 	- [community](http://terracoin.io/community.html)
