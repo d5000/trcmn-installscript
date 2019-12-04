@@ -17,7 +17,6 @@ Your coins will be safe if the masternode server is hacked.
 	* [2.3 Automatic Masternode Setup](#23-automatic-masternode-setup)
 	* [2.4 Add masternode to the desktop wallet](#24-add-masternode-to-the-desktop-wallet)
 * [3. FAQ](#3-faq)
-* [4. The last and the most important step](#4-support)
 
 ## 1. Desktop Wallet Preparation <a href="https://www.youtube.com/watch?v=HAF1NPFsb8Q" target="_blank"><img src="https://i.imgur.com/SY3eO38.png"></a>
 
