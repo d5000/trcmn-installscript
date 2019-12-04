@@ -8,7 +8,7 @@ import sys
 import time
 import math
 import json
-from urllib2 import urlopen
+from urllib2 import urlopen, HTTPError, URLError, Request
 
 BOOTSTRAP_URL = "https://terracoin.io/bin/bootstrap/"
 SENTINEL_GIT_URL = "https://github.com/terracoin/sentinel.git"
@@ -34,13 +34,24 @@ MN_WFOLDER = "TerracoinCore"
 MN_CONFIGFILE = "terracoin.conf"
 MN_DAEMON = "terracoind"
 MN_CLI = "terracoin-cli"
-MN_EXPLORER = "https://explorer.terracoin.io/"
+MN_EXPLORER = "https://insight.terracoin.io/"
 
 MN_SWAPSIZE = "2G"
 SERVER_IP = urlopen('https://api.ipify.org/').read()
 DEFAULT_COLOR = "\x1b[0m"
 PRIVATE_KEY = ""
 COLLATERAL_ADDRESS = ""
+COLLATERAL_TX = ""
+COLLATERAL_IDX = ""
+
+REQUEST_HDRS = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.64 Safari/537.11',
+       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+       'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.3',
+       'Accept-Encoding': 'none',
+       'Accept-Language': 'en-US,en;q=0.8',
+       'Connection': 'keep-alive'}
+
+need_credential = True
 
 def print_info(message):
     BLUE = '\033[94m'
@@ -112,7 +123,7 @@ def print_welcome():
     print(GREEN + "   | |  __/ |  | | | (_| | (_| (_) | | | | |" + DEFAULT_COLOR)
     print(GREEN + "   |_|\___|_|  |_|  \__,_|\___\___/|_|_| |_|" + DEFAULT_COLOR)
     print(GREEN + "                                            " + DEFAULT_COLOR)
-    print_info("Terracoin masternode installer v1.4")
+    print_info("Terracoin masternode installer v1.5")
 
 def update_system():
     print_info("Updating the system...")
@@ -151,18 +162,39 @@ def setup_wallet():
     run_command("find /tmp -name {} -exec cp {{}} /usr/local/bin \;".format(MN_CLI))
 
 def get_collateral_address():
-    global COLLATERAL_ADDRESS
+    global COLLATERAL_ADDRESS, COLLATERAL_TX, COLLATERAL_IDX
     print_info("Enter the public address that holds the 5000TRC collateral for this masternode")
     collateral_address = raw_input("address: ")
     COLLATERAL_ADDRESS = collateral_address
-    # FIXME add explorer or insight call to check the address has a collateral?
+    print_info('Getting collateral info from explorer...')
+    txs = False
+    try:
+        apicall = '{}api/addr/{}/utxo'.format(MN_EXPLORER, COLLATERAL_ADDRESS)
+        req = Request(apicall, headers=REQUEST_HDRS)
+        response = urlopen(req)
+        txs = json.load(response)
+    except HTTPError, e:
+        print_error('HTTPError = ' + str(e.code))
+    except URLError, e:
+        print_error('URLError = ' + str(e.reason))
+    except Exception:
+        print_error('generic exception')
+
+    if (txs):
+        for tx in txs:
+            if (tx['amount'] == 5000):
+                COLLATERAL_TX = str(tx['txid'])
+                COLLATERAL_IDX = str(tx['vout'])
+                break
+
+    if (not COLLATERAL_TX or not COLLATERAL_IDX):
+         print_warning('Could not find the collateral for this masternode')
 
 def setup_masternode():
-    global PRIVATE_KEY
+    global PRIVATE_KEY, need_credential
     print_info("Setting up masternode...")
     run_command("useradd --create-home -G sudo {}".format(MN_USERNAME))
 
-    need_credential = True
     if os.path.isfile("/usr/local/bin/{}".format(MN_DAEMON)) and os.path.isfile("/usr/local/bin/{}".format(MN_CLI)) and os.path.isfile("/home/{}/{}/{}".format(MN_USERNAME, MN_LFOLDER, MN_CONFIGFILE)):
         need_credential = False
         run_command_as(MN_USERNAME, "{} stop".format(MN_CLI))
@@ -234,7 +266,9 @@ def crontab(job):
 
 
 def autostart_masternode():
-    job = "@reboot /usr/local/bin/{}".format(MN_DAEMON)
+    job = "@reboot /usr/local/bin/{} -daemon".format(MN_DAEMON)
+    crontab(job)
+    job = "*/10 * * * * if ! pgrep {0} > /dev/null; then /usr/local/bin/{0} -daemon; fi".format(MN_DAEMON)
     crontab(job)
 
 def rotate_logs():
@@ -269,6 +303,9 @@ def setup_sentinel():
         return
     
     print_info("Setting up Sentinel (/home/{}/{}/sentinel)...".format(MN_USERNAME, MN_LFOLDER))
+    if os.path.isdir('/home/{}/{}/sentinel'.format(MN_USERNAME, MN_LFOLDER)):
+        print_warning("Sentinel already setup...")
+        return
 
     # install dependencies
     print_info("Installing Sentinel dependencies...")
@@ -291,6 +328,8 @@ def setup_services():
     global SERVICES_ENABLED
 
     # no services support
+    if not need_credential:
+        return
     if SERVICES_URL == "":
         return
     if SERVICES_TOOLS == '':
@@ -304,6 +343,11 @@ def setup_services():
     if (res == 'n' or res == 'no'):
         return
 
+    print_info("Setting up Services (/home/{}/{}/terracoinservices-updater)...".format(MN_USERNAME, MN_LFOLDER))
+    if os.path.isdir('/home/{}/{}/terracoinservices-updater'.format(MN_USERNAME, MN_LFOLDER)):
+        print_warning("Services Tools already setup...")
+        return
+
     SERVICES_ENABLED = True
 
     if COLLATERAL_ADDRESS == '':
@@ -311,8 +355,6 @@ def setup_services():
 
     print_info("Login to https://services.terracoin.io (My Account -> Account Settings) and copy the API key")
     apikey = raw_input("API key: ")
-
-    print_info("Setting up Services (/home/{}/{}/terracoinservices-updater)...".format(MN_USERNAME, MN_LFOLDER))
 
     # install dependencies
     print_info("Installing Services Tools dependencies...")
@@ -361,16 +403,15 @@ our %masternodes = (
     regstatus = False
     try:
         apicall = '{}api/v1/setappdata?api_key={}&do=add_masternode&name={}&address={}'.format(SERVICES_URL, apikey, 'MN_' + SERVER_IP.replace('.', '_'), COLLATERAL_ADDRESS)
-        response = urlopen(apicall)
+        req = Request(apicall, headers=REQUEST_HDRS)
+        response = urlopen(req)
         reg = json.load(response)
         if (reg['status'] == 'ok'):
             regstatus = True
-    except urllib2.HTTPError, e:
+    except HTTPError, e:
         print_error('HTTPError = ' + str(e.code))
-    except urllib2.URLError, e:
+    except URLError, e:
         print_error('URLError = ' + str(e.reason))
-    except httplib.HTTPException, e:
-        print_error('HTTPException')
     except Exception:
         print_error('generic exception')
 
@@ -382,6 +423,9 @@ our %masternodes = (
 
 def setup_statuspage():
     global STATUS_ENABLED
+    if not need_credential:
+        return
+
     # no status page support
     if STATUS_PAGE_GIT_URL == "":
         return
@@ -391,26 +435,135 @@ def setup_statuspage():
     if (res == 'n' or res == 'no'):
         return
 
-    # FIXME Not ready
-    print_warning('Status Page setup is not yet implemented')
-    return
-    STATUS_ENABLED = True
-
-    # Ask if we want to setup status page
-    if COLLATERAL_ADDRESS == '':
-        get_collateral_address()
-
     print_info("Setting up Status Page Using Apache (/var/www/terracoind-status)...")
+    if os.path.isfile('/var/www/html/php/config.php'):
+        print_warning("Status Page already setup...")
+        return
+
+    STATUS_ENABLED = True
 
     # install dependencies
     print_info("Installing Status Page dependencies...")
-    run_command("apt-get -y install libapache-mod-php curl")
+    run_command("apt-get -y install libapache2-mod-php php-curl curl")
+    run_command("apache2ctl restart")
 
     # download and install status page
+    print_info("Downloading Status Page and installing...")
     run_command("cd /var/www && git clone {}".format(STATUS_PAGE_GIT_URL))
+    run_command("mv /var/www/html /var/www/html.orig && ln -s /var/www/terracoind-status /var/www/html && mkdir /var/www/cache && chown www-data: /var/www/cache")
 
     # configure status page
-    # FIXME Add config
+    config = """<?php
+/**
+ * Terracoin Status Page
+ *
+ * @category File
+ * @package  TerracoinStatus
+ * @author   Craig Watson <craig@cwatson.org>
+ * @author   TheSin <thesin@southofheaven.org>
+ * @license  https://www.apache.org/licenses/LICENSE-2.0 Apache License, Version 2.0
+ * @link     https://github.com/thesin-/terracoind-status
+ */
+
+$config = array(
+  // RPC
+  'rpc_user'                  => '{}',
+  'rpc_pass'                  => '{}',
+  'rpc_host'                  => 'localhost',
+  'rpc_port'                  => '{}',
+  'rpc_ssl'                   => false,
+  'rpc_ssl_ca'                => null,
+
+  // Donations
+  'display_donation_text'     => true,
+  'donation_address'          => '1LMF4gAhwUX8TN6e5Ff6m89oZG2HRcg7jL',
+  'donation_amount'           => '5',
+
+  // Peers
+  'display_peer_info'         => false,
+  'display_peer_port'         => false,
+  'hide_dark_peers'           => false,
+  'ignore_unknown_ping'       => false,
+  'peers_to_ignore'           => array(),
+
+  // Cache
+  'cache_geo_data'            => true,
+  'geo_cache_file'            => '../cache/terracoind-geolocation.cache',
+  'geo_cache_time'            => 7 * 24 * 60 * 60, // 1 week
+  'use_cache'                 => true,
+  'cache_file'                => '../cache/terracoind-status.cache',
+  'max_cache_time'            => 300,
+  'nocache_whitelist'         => array('127.0.0.1'),
+
+  // Geolocation
+  'geolocate_peer_ip'         => true,
+  'display_ip_location'       => true,
+
+  // UI
+  'display_ip'                => false,
+  'display_free_disk_space'   => false,
+  'display_testnet'           => false,
+  'display_masternode_status' => true,
+  'display_version'           => true,
+  'display_github_ribbon'     => true,
+  'display_max_height'        => true,
+  'use_terracoind_ip'         => false,
+  'intro_text'                => 'not_set',
+  'chart_min_data_points'     => 5,
+  'display_chart'             => true,
+  'display_peer_chart'        => false,
+  'display_masternode_chart'  => true,
+  'display_difficulty_chart'  => true,
+  'display_load_chart'        => true,
+  'display_memory_chart'      => true,
+  'node_links'                => array(),
+
+  // Stats
+  'stats_whitelist'           => array('127.0.0.1'),
+  'stats_file'                => '../cache/terracoind-status.data',
+  'stats_max_age'             => 7 * 24 * 60 * 60, // 1 week
+
+  // Node Count
+  'peercount_whitelist'       => array('127.0.0.1'),
+  'peercount_file'            => '../cache/terracoind-peers.data',
+  'peercount_max_age'         => 2 * 24 * 60 * 60, // 2 days
+  'peercount_extra_nodes'     => array(),
+
+  // Masternode Count
+  'masternodecount_file'      => '../cache/terracoind-mns.data',
+  'masternodecount_max_age'   => 2 * 24 * 60 * 60, // 2 days
+
+  // Difficulty
+  'difficulty_file'           => '../cache/terracoind-difficulty.data',
+  'difficulty_max_age'        => 2 * 24 * 60 * 60, // 2 days
+
+  // System Load
+  'load_file'                 => '../cache/terracoind-sysload.data',
+  'load_max_age'              => 2 * 24 * 60 * 60, // 2 days
+
+  // System Memory
+  'memory_file'               => '../cache/terracoind-sysmem.data',
+  'memory_max_age'            => 2 * 24 * 60 * 60, // 2 days
+
+  // Uptime
+  'display_terracoind_uptime' => true,
+  'terracoind_process_name'   => '{}',
+
+  // System
+  'date_format'               => 'H:i:s T, j F Y ',
+  'disk_space_mount_point'    => '.',
+  'timezone'                  => null,
+  'stylesheet'                => 'v2-light.css',
+  'debug'                     => false,
+  'admin_email'               => '{}',
+);
+?>""".format(MN_RPCUSER, MN_RPCPASS, MN_RPCPORT, MN_DAEMON, 'noreply@localhost')
+
+    run_command("touch /var/www/html/php/config.php")
+        
+    print_info("Saving config file...")
+    with open('/var/www/html/php/config.php', 'w') as f:
+        f.write(config)
 
     # setup cron jobs
     job = "*/5 *  *   *   *  curl -Ssk http://127.0.0.1/stats.php > /dev/null"
@@ -429,17 +582,31 @@ def setup_statuspage():
     crontab(job)
     
 def end():
+    collateral_tx = "[The transaction id of the desposit. 'masternode outputs']"
+    if (COLLATERAL_TX):
+        collateral_tx = COLLATERAL_TX 
+    collateral_idx = "[The transaction index of the desposit. 'masternode outputs']"
+    if (COLLATERAL_IDX):
+        collateral_idx = COLLATERAL_IDX
 
-    mn_base_data = """
+    if (COLLATERAL_TX and COLLATERAL_IDX):
+        mn_base_data = """
+    Append the following line to end of your local wallet masternode.conf file:
+{} {} {} {} {}
+    --------------------------------------------------
+"""
+    else:
+        mn_base_data = """
     Masternode Info
+    Alias: {}
     IP: {}
     Private key: {}
-    Transaction ID: [The transaction id of the desposit. 'masternode outputs']
-    Transaction index: [The transaction index of the desposit. 'masternode outputs']
+    Transaction ID: {}
+    Transaction index: {}
     --------------------------------------------------
 """
 
-    mn_data = mn_base_data.format(SERVER_IP + ":" + str(MN_PORT), PRIVATE_KEY)
+    mn_data = mn_base_data.format("MN_" + SERVER_IP.replace(".", "_"), SERVER_IP + ":" + str(MN_PORT), PRIVATE_KEY, collateral_tx, collateral_idx)
 
     services_data = ""
     if SERVICES_ENABLED:
@@ -453,7 +620,7 @@ def end():
     status_data = ""
     if STATUS_ENABLED:
         status_base_data = """
-    Status Page available at: http://{}/
+    Masternode Status Page available at: http://{}/
     --------------------------------------------------
 """
         status_data = status_base_data.format(SERVER_IP)
