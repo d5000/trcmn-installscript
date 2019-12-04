@@ -7,10 +7,17 @@ import binascii
 import sys
 import time
 import math
+import json
 from urllib2 import urlopen
 
 BOOTSTRAP_URL = "https://terracoin.io/bin/bootstrap/"
 SENTINEL_GIT_URL = "https://github.com/terracoin/sentinel.git"
+STATUS_PAGE_GIT_URL = "https://github.com/thesin-/terracoind-status.git"
+STATUS_ENABLED = False
+SERVICES_URL = "https://services.terracoin.io/"
+SERVICES_TOOLS = "terracoinservices-updater-v1.tgz"
+SERVICES_TOOLS_DIR = "terracoinservices-updater"
+SERVICES_ENABLED = False
 
 # Maybe pull this from online, setup a file in bin on terracoin.io?
 TERRACOIN_WALLET = "https://terracoin.io/bin/terracoin-core-current/terracoin-LATEST-x86_64-linux-gnu.tar.gz"
@@ -18,6 +25,8 @@ TERRACOIN_WALLET = "https://terracoin.io/bin/terracoin-core-current/terracoin-LA
 MN_USERNAME = "trcmn"
 MN_PORT = 13333
 MN_RPCPORT = 22350
+MN_RPCUSER = binascii.hexlify(os.urandom(6))
+MN_RPCPASS = binascii.hexlify(os.urandom(16))
 MN_NODELIST = ""
 
 MN_LFOLDER = ".terracoincore"
@@ -31,6 +40,7 @@ MN_SWAPSIZE = "2G"
 SERVER_IP = urlopen('https://api.ipify.org/').read()
 DEFAULT_COLOR = "\x1b[0m"
 PRIVATE_KEY = ""
+COLLATERAL_ADDRESS = ""
 
 def print_info(message):
     BLUE = '\033[94m'
@@ -102,7 +112,7 @@ def print_welcome():
     print(GREEN + "   | |  __/ |  | | | (_| | (_| (_) | | | | |" + DEFAULT_COLOR)
     print(GREEN + "   |_|\___|_|  |_|  \__,_|\___\___/|_|_| |_|" + DEFAULT_COLOR)
     print(GREEN + "                                            " + DEFAULT_COLOR)
-    print_info("Terracoin masternode installer v1.3")
+    print_info("Terracoin masternode installer v1.4")
 
 def update_system():
     print_info("Updating the system...")
@@ -140,6 +150,13 @@ def setup_wallet():
     run_command("find /tmp -name {} -exec cp {{}} /usr/local/bin \;".format(MN_DAEMON))
     run_command("find /tmp -name {} -exec cp {{}} /usr/local/bin \;".format(MN_CLI))
 
+def get_collateral_address():
+    global COLLATERAL_ADDRESS
+    print_info("Enter the public address that holds the 5000TRC collateral for this masternode")
+    collateral_address = raw_input("address: ")
+    COLLATERAL_ADDRESS = collateral_address
+    # FIXME add explorer or insight call to check the address has a collateral?
+
 def setup_masternode():
     global PRIVATE_KEY
     print_info("Setting up masternode...")
@@ -150,12 +167,9 @@ def setup_masternode():
         need_credential = False
         run_command_as(MN_USERNAME, "{} stop".format(MN_CLI))
         PRIVATE_KEY = "using the previous private key"
-        print_info("Using the previous rpc username, prc password and private key.")
+        print_info("Using the previous rpc username, rpc password and private key.")
 
     if need_credential:
-        rpc_username = binascii.hexlify(os.urandom(6))
-        rpc_password = binascii.hexlify(os.urandom(16))
-    
         print_info("Open your wallet console (Tools => Debug Console) and create a new masternode private key: masternode genkey")
         masternode_priv_key = raw_input("masternodeprivkey: ")
         PRIVATE_KEY = masternode_priv_key
@@ -174,7 +188,7 @@ masternode=1
 disablewallet=1
 externalip={}:{}
 masternodeprivkey={}
-{}""".format(rpc_username, rpc_password, MN_RPCPORT, MN_PORT, SERVER_IP, MN_PORT, masternode_priv_key, MN_NODELIST)
+{}""".format(MN_RPCUSER, MN_RPCPASS, MN_RPCPORT, MN_PORT, SERVER_IP, MN_PORT, masternode_priv_key, MN_NODELIST)
     
         # creates folder structure
         run_command_as(MN_USERNAME, "mkdir -p /home/{}/{}/".format(MN_USERNAME, MN_LFOLDER))
@@ -184,23 +198,25 @@ masternodeprivkey={}
         with open('/home/{}/{}/{}'.format(MN_USERNAME, MN_LFOLDER, MN_CONFIGFILE), 'w') as f:
             f.write(config)
         
-    print_info("Downloading blockchain bootstrap file...")
+    print_info("Installing bootstrap dependencies...")
     run_command("apt-get --assume-yes install wget gpg gzip")
+    print_info("Downloading blockchain bootstrap file...")
     filename = "bootstrap.dat.gz"
-    run_command_as(MN_USERNAME, "cd && wget '{}/{}'".format(BOOTSTRAP_URL, filename), False)
-    run_command_as(MN_USERNAME, "cd && wget '{}/bootstrap-SHA256SUM.asc'".format(BOOTSTRAP_URL), False)
-    run_command_as(MN_USERNAME, "cd && wget '{}/verify.sh'".format(BOOTSTRAP_URL), False)
-    run_command_as(MN_USERNAME, "cd && wget '{}/verify.sh'".format(BOOTSTRAP_URL), False)
-    run_command_as(MN_USERNAME, "cd && rm -f good && bash verify.sh && touch good", False)
+    run_command_as(MN_USERNAME, "cd && wget '{}/{}'".format(BOOTSTRAP_URL, filename))
+    run_command_as(MN_USERNAME, "cd && wget '{}/bootstrap-SHA256SUM.asc'".format(BOOTSTRAP_URL))
+    run_command_as(MN_USERNAME, "cd && wget '{}/verify.sh'".format(BOOTSTRAP_URL))
+    run_command_as(MN_USERNAME, "cd && wget '{}/verify.sh'".format(BOOTSTRAP_URL))
+    print_info("Verifying Authenticity of bootstrap file...")
+    run_command_as(MN_USERNAME, "cd && rm -f good && bash verify.sh && touch good")
 
     bootstrap = ""
     if (os.path.isfile("/home/{}/good".format(MN_USERNAME))):
-        print_info("Decompressing the file...")
+        print_info("Verification passed, Decompressing...")
         run_command_as(MN_USERNAME, "cd && rm -f good verify.sh bootstrap-SHA256SUM.asc && rm -rf {0}/blocks {0}/chainstate".format(MN_LFOLDER))
         run_command_as(MN_USERNAME, "cd && gzip -d {}".format(filename))
         bootstrap = " -loadblock=/home/{}/bootstrap.dat".format(MN_USERNAME)
     else:
-        print_error("Verify failed, Not using bootstrap...")
+        print_warning("Verification failed, Not using bootstrap...")
        
     os.system('su - {} -c "{}" '.format(MN_USERNAME, MN_DAEMON + '{} -daemon'.format(bootstrap)))
     print_warning("Masternode started syncing in the background...")
@@ -224,7 +240,7 @@ def autostart_masternode():
 def rotate_logs():
     print_info("Enable logfile rotating...")
     f = open('/etc/logrotate.d/terracoin_masternode_{}'.format(MN_USERNAME),'w')
-    f.write('''/home/{0}/{1}/debug.log {{
+    f.write('''/home/{0}/{1}/debug.log /home/{0}/{1}/trcupdater.log {{
     daily
     missingok
     rotate 14
@@ -247,8 +263,6 @@ def rotate_logs():
 '''.format(MN_USERNAME, MN_LFOLDER, MN_CLI, MN_DAEMON))
     f.close()
 
-    
-
 def setup_sentinel():
     # no sentinel support
     if SENTINEL_GIT_URL == "":
@@ -257,6 +271,7 @@ def setup_sentinel():
     print_info("Setting up Sentinel (/home/{}/{}/sentinel)...".format(MN_USERNAME, MN_LFOLDER))
 
     # install dependencies
+    print_info("Installing Sentinel dependencies...")
     run_command("apt-get -y install python-virtualenv git virtualenv")
 
     # download and install sentinel
@@ -269,7 +284,148 @@ def setup_sentinel():
     crontab(job)
 
     # try to update sentinel every day
-    job = "* * 1 * * cd /home/{}/{}/sentinel && git pull https://github.com/terracoin/sentinel.git".format(MN_USERNAME, MN_LFOLDER)
+    job = "* * 1 * * cd /home/{}/{}/sentinel && git pull {}".format(MN_USERNAME, MN_LFOLDER, SENTINEL_GIT_URL)
+    crontab(job)
+
+def setup_services():
+    global SERVICES_ENABLED
+
+    # no services support
+    if SERVICES_URL == "":
+        return
+    if SERVICES_TOOLS == '':
+        return
+    if SERVICES_TOOLS_DIR == '':
+        return
+
+    # Ask if we want to setup services
+    print_info("You will require an account at https://services.terracoin.io")
+    res = raw_input("Install Services Tools? (y/n)").lower()
+    if (res == 'n' or res == 'no'):
+        return
+
+    SERVICES_ENABLED = True
+
+    if COLLATERAL_ADDRESS == '':
+        get_collateral_address()
+
+    print_info("Login to https://services.terracoin.io (My Account -> Account Settings) and copy the API key")
+    apikey = raw_input("API key: ")
+
+    print_info("Setting up Services (/home/{}/{}/terracoinservices-updater)...".format(MN_USERNAME, MN_LFOLDER))
+
+    # install dependencies
+    print_info("Installing Services Tools dependencies...")
+    run_command("apt-get -y install wget tar")
+
+    # download and install services tools
+    run_command_as(MN_USERNAME, "cd && wget '{}/downloads/{}' -O /home/{}/{}/{}".format(SERVICES_URL, SERVICES_TOOLS, MN_USERNAME, MN_LFOLDER, SERVICES_TOOLS))
+    run_command_as(MN_USERNAME, "cd /home/{}/{} && tar xzf {}".format(MN_USERNAME, MN_LFOLDER, SERVICES_TOOLS))
+
+    # configure services tools
+    config = """################
+# terracoinservices-updater configuration
+################
+
+our %settings = (
+	# Enter your Terracoin Services api key here
+	'api_key' => '{}'
+);
+
+our %masternodes = (
+	'{}' => {{
+		'rpc_host'				=> 'localhost',
+		'rpc_port'				=> {},
+		'rpc_user'				=> '{}',
+		'rpc_password'				=> '{}',
+		'daemon_autorestart'			=> 'disabled',
+		'daemon_binary'				=> '/usr/local/bin/{}',
+		'daemon_datadir'			=> '/home/{}/{}'
+	}}
+);
+
+#
+1;""".format(apikey, COLLATERAL_ADDRESS, MN_RPCPORT, MN_RPCUSER, MN_RPCPASS, MN_DAEMON, MN_USERNAME, MN_LFOLDER)
+
+    run_command_as(MN_USERNAME, "cd && rm -f /home/{}/{}/{}/terracoinservices.conf".format(MN_USERNAME, MN_LFOLDER, SERVICES_TOOLS_DIR))
+    run_command_as(MN_USERNAME, "touch /home/{}/{}/{}/terracoinservices.conf".format(MN_USERNAME, MN_LFOLDER, SERVICES_TOOLS_DIR))
+
+    print_info("Saving config file...")
+    with open('/home/{}/{}/{}/terracoinservices.conf'.format(MN_USERNAME, MN_LFOLDER, SERVICES_TOOLS_DIR), 'w') as f:
+        f.write(config)
+
+    # run services tool every 2 minutes
+    job = "*/2 * * * *   /home/{}/{}/{}/trcupdater >> /home/{}/{}/trcupdater.log 2>&1".format(MN_USERNAME, MN_LFOLDER, SERVICES_TOOLS_DIR, MN_USERNAME, MN_LFOLDER)
+    crontab(job)
+
+    regstatus = False
+    try:
+        apicall = '{}api/v1/setappdata?api_key={}&do=add_masternode&name={}&address={}'.format(SERVICES_URL, apikey, 'MN_' + SERVER_IP.replace('.', '_'), COLLATERAL_ADDRESS)
+        response = urlopen(apicall)
+        reg = json.load(response)
+        if (reg['status'] == 'ok'):
+            regstatus = True
+    except urllib2.HTTPError, e:
+        print_error('HTTPError = ' + str(e.code))
+    except urllib2.URLError, e:
+        print_error('URLError = ' + str(e.reason))
+    except httplib.HTTPException, e:
+        print_error('HTTPException')
+    except Exception:
+        print_error('generic exception')
+
+    if (regstatus):
+        print_info('Masternode is registered on Services in your account!')
+        SERVICES_ENABLED = False
+    else:
+        print_warning('Auto registration on Services failed ({}), please do it manually'.format(reg['message']))
+
+def setup_statuspage():
+    global STATUS_ENABLED
+    # no status page support
+    if STATUS_PAGE_GIT_URL == "":
+        return
+
+    print_info("This will install and setup a web status page for your masternode")
+    res = raw_input("Install Status Page? (y/n)").lower()
+    if (res == 'n' or res == 'no'):
+        return
+
+    # FIXME Not ready
+    print_warning('Status Page setup is not yet implemented')
+    return
+    STATUS_ENABLED = True
+
+    # Ask if we want to setup status page
+    if COLLATERAL_ADDRESS == '':
+        get_collateral_address()
+
+    print_info("Setting up Status Page Using Apache (/var/www/terracoind-status)...")
+
+    # install dependencies
+    print_info("Installing Status Page dependencies...")
+    run_command("apt-get -y install libapache-mod-php curl")
+
+    # download and install status page
+    run_command("cd /var/www && git clone {}".format(STATUS_PAGE_GIT_URL))
+
+    # configure status page
+    # FIXME Add config
+
+    # setup cron jobs
+    job = "*/5 *  *   *   *  curl -Ssk http://127.0.0.1/stats.php > /dev/null"
+    crontab(job)
+    job = "*/5 *  *   *   *  curl -Ssk http://127.0.0.1/peercount.php > /dev/null"
+    crontab(job)
+    job = "*/5 *  *   *   *  curl -Ssk http://127.0.0.1/masternodecount.php > /dev/null"
+    crontab(job)
+    job = "*/5 *  *   *   *  curl -Ssk http://127.0.0.1/difficulty.php > /dev/null"
+    crontab(job)
+    job = "*/5 *  *   *   *  curl -Ssk http://127.0.0.1/sysstats.php > /dev/null"
+    crontab(job)
+
+    # try to update status page every day
+    job = "* * 1 * * cd /var/www/terracoind-status && git pull {}".format(STATUS_PAGE_GIT_URL)
     crontab(job)
     
 def end():
@@ -285,19 +441,33 @@ def end():
 
     mn_data = mn_base_data.format(SERVER_IP + ":" + str(MN_PORT), PRIVATE_KEY)
 
+    services_data = ""
+    if SERVICES_ENABLED:
+        services_base_data = """
+
+    Do not forget to register your MasterNode on {}
+
+"""
+        services_data = services_base_data.format(SERVICES_URL)
+
+    status_data = ""
+    if STATUS_ENABLED:
+        status_base_data = """
+    Status Page available at: http://{}/
+    --------------------------------------------------
+"""
+        status_data = status_base_data.format(SERVER_IP)
+
     print('')
     print_info(
 """Masternodes setup finished!
-    Wait until the masternode is fully synced. To check the progress login the 
-    masternode account (su {}) and run the '{} getinfo' command to get
-    the actual block number. Go to {} website to check 
-    the latest block number or use your wallet. After the syncronization is done 
-    add your masternode to your desktop wallet.
-
-Masternode data:""".format(MN_USERNAME, MN_CLI, MN_EXPLORER) + mn_data)
-
-    #imp = R"""Vs lbh sbhaq gur thvqr naq guvf fpevcg hfrshy pbafvqre gb fhccbeg zr.\a    GEP: 15OzSsULdFbQg19ElqJZ2seFHJFNpMjgDp\a    RGU: 0k9n794240o456O8qQ5593n7r8q7NR92s4pn4Q9Q2s\a    OGP: 33PeQClZcpjWSlZGprIZGYWLYE8mOFfaJz\a\a"""
-    #print_warning(imp.decode('rot13').decode('unicode-escape'))
+    Wait until the masternode is fully synced. To check the progress login the
+    masternode account (su {}) and run the '{} getinfo' command
+    to get the actual block number. Go to {}
+    website to check the latest block number or use your wallet. After the
+    syncronization is done add your masternode to your desktop wallet.
+{}
+Masternode data:""".format(MN_USERNAME, MN_CLI, MN_EXPLORER, services_data) + mn_data + status_data)
 
 def main():
     print_welcome()
@@ -308,6 +478,8 @@ def main():
     autostart_masternode()
     rotate_logs()
     setup_sentinel()
+    setup_services()
+    setup_statuspage()
     end()
 
 if __name__ == "__main__":
