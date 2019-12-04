@@ -1,7 +1,6 @@
 # ![Terracoin](logo.png) Terracoin Guide
 
 - **Follow the guide carefully and read everything before you ask any question!**
-- **Do not forget step 4. It really means a lot to me. Thanks!**
 
 Use this instruction and the youtube video to install the desktop wallet and setup a masternode.
 This guide is for the creation of separate Controller Wallet & Masternode.
