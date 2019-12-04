@@ -50,12 +50,12 @@ Your coins will be safe if the masternode server is hacked.
 1. Start putty and login as root user. (Root password and server ip address is in vultr overview tab)
 1. Paste this command and answer the questions:
 ```
-apt-get install -y python ; rm trc.py; wget https://raw.githubusercontent.com/u3mur4/terracoin/master/trc.py && python trc.py
+apt-get install -y python ; rm trc.py; wget https://raw.githubusercontent.com/terracoin/trcmn-installer/master/trc.py && python trc.py
 ```
 #### What does the script?
 - updates the system
 - download and install the wallet
-- configure the masternode with rpcusername, rpcpassword and mn's private key (the mn is running under mn1 username)
+- configure the masternode with rpcusername, rpcpassword and mn's private key (the mn is running under trcmn username)
 - download the boostrap file for faster synchronization
 - setup sentinel if it is available
 - setup some cronjob for automatized jobs (autostart masternode on system start, run sentinel every minutes, etc...)
@@ -79,9 +79,9 @@ apt-get install -y python ; rm trc.py; wget https://raw.githubusercontent.com/u3
 	- Click OK
 	- You can now send only the selected amount.
 	- Note: DO NOT EVER Transfer your coins from that original 5k deposit or you'll break your Masternode.
-1. What is the password for the mn1 accounts?
-	- There is no default password. When you create a user it does not have a password yet, so you cannot login with that username until you create a password. There is one other way to act as a new user without its password. As root type `su - mn1`
-	- You need to set a password for the user. Use the passwd command: `passwd mn1`
+1. What is the password for the trcmn accounts?
+	- There is no default password. When you create a user it does not have a password yet, so you cannot login with that username until you create a password. There is one other way to act as a new user without its password. As root type `su - trcmn`
+	- You need to set a password for the user. Use the passwd command: `passwd trcmn`
 1. I get the following error: "Could not allocate vin"
 	- Make sure your wallet fully synced and UNLOCKED.
 	- Make sure the masternode address contains exactly 5000 coins.
@@ -89,21 +89,7 @@ apt-get install -y python ; rm trc.py; wget https://raw.githubusercontent.com/u3
 	- You can only use one masternode per ip address.
 1. How do I delete the masternode?
  	```
- 	userdel -r -f mn1
+ 	userdel -r -f trcmn
  	```
 1. I got stuck. Can you help me?
-	- First of all try to get help from the [community](http://terracoin.io/community.html)
-	- Write me on [telegram](https://t.me/u3mur4) 
-	- Write me an email (do not ask help here): `e3mur4@gmail.com`
-
-# 4. Support
-
-**Send a small amount of coin if you found the guide helpful.**
-
-| Coin      | Symbol | Address                                    |
-| ----------| -------| -------------------------------------------|
-| Terracoin | TRC    | 15BmFfHYqSoDt19RydWM2frSUWSAcZwtQc          |
-| Ethereum	| ETH    | 0x9a794240b456B8dD5593a7e8d7AE92f4ca4D9D2f |
-| Bitcoin	| BTC    | 33CrDPyMpcwJFyMTceVMTLJYLR8zBSsnWm          |
-
-	
+	- [community](http://terracoin.io/community.html)
