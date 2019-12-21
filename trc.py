@@ -92,7 +92,7 @@ def run_command(command, remove=True):
     	
     	while True:
     	    line = out.stdout.readline()
-    	    if (line == ""):
+    	    if (not line):
     	        break
     	    
     	    # remove previous lines     
@@ -100,7 +100,7 @@ def run_command(command, remove=True):
     	    
     	    w, h = get_terminal_size()
     	    lines.append(line.strip().encode('string_escape')[:w-3] + "\n")
-    	    if(len(lines) >= 9):
+    	    if (len(lines) >= 9):
     	        del lines[0]
 
     	    # print lines again
@@ -134,7 +134,7 @@ def update_system():
 def check_root():
     print_info("Check root privileges")
     user = os.getuid()
-    if user != 0:
+    if (user != 0):
         print_error("This program requires root privileges.  Run as root user.")
         sys.exit(-1)
 
@@ -188,20 +188,20 @@ def get_collateral_address():
                 break
 
     if (not COLLATERAL_TX or not COLLATERAL_IDX):
-         print_warning('Could not find the collateral for this masternode')
+         print_error('Could not find the collateral for this masternode')
 
 def setup_masternode():
     global PRIVATE_KEY, need_credential
     print_info("Setting up masternode...")
     run_command("useradd --create-home -G sudo {}".format(MN_USERNAME))
 
-    if os.path.isfile("/usr/local/bin/{}".format(MN_DAEMON)) and os.path.isfile("/usr/local/bin/{}".format(MN_CLI)) and os.path.isfile("/home/{}/{}/{}".format(MN_USERNAME, MN_LFOLDER, MN_CONFIGFILE)):
+    if (os.path.isfile("/usr/local/bin/{}".format(MN_DAEMON)) and os.path.isfile("/usr/local/bin/{}".format(MN_CLI)) and os.path.isfile("/home/{}/{}/{}".format(MN_USERNAME, MN_LFOLDER, MN_CONFIGFILE))):
         need_credential = False
         run_command_as(MN_USERNAME, "{} stop".format(MN_CLI))
         PRIVATE_KEY = "using the previous private key"
         print_info("Using the previous rpc username, rpc password and private key.")
 
-    if need_credential:
+    if (need_credential):
         print_info("Open your wallet console (Tools => Debug Console) and create a new masternode private key: masternode genkey")
         masternode_priv_key = raw_input("masternodeprivkey: ")
         PRIVATE_KEY = masternode_priv_key
@@ -258,7 +258,7 @@ def crontab(job):
     p.wait()
     lines = p.stdout.readlines()
     job = job + "\n"
-    if job not in lines:
+    if (job not in lines):
         print_info("Cron job doesn't exist yet, adding it to crontab")
         lines.append(job)
         p = Popen('echo "{}" | crontab -u {} -'.format(''.join(lines), MN_USERNAME), stderr=STDOUT, stdout=PIPE, shell=True)
@@ -299,11 +299,11 @@ def rotate_logs():
 
 def setup_sentinel():
     # no sentinel support
-    if SENTINEL_GIT_URL == "":
+    if (not SENTINEL_GIT_URL):
         return
     
     print_info("Setting up Sentinel (/home/{}/{}/sentinel)...".format(MN_USERNAME, MN_LFOLDER))
-    if os.path.isdir('/home/{}/{}/sentinel'.format(MN_USERNAME, MN_LFOLDER)):
+    if (os.path.isdir('/home/{}/{}/sentinel'.format(MN_USERNAME, MN_LFOLDER))):
         print_warning("Sentinel already setup...")
         return
 
@@ -325,16 +325,16 @@ def setup_sentinel():
     crontab(job)
 
 def setup_services():
-    global SERVICES_ENABLED
+    global SERVICES_ENABLED, COLLATERAL_TX, COLLATERAL_IDX
 
     # no services support
-    if not need_credential:
+    if (not need_credential):
         return
-    if SERVICES_URL == "":
+    if (not SERVICES_URL):
         return
-    if SERVICES_TOOLS == '':
+    if (not SERVICES_TOOLS):
         return
-    if SERVICES_TOOLS_DIR == '':
+    if (not SERVICES_TOOLS_DIR):
         return
 
     # Ask if we want to setup services
@@ -344,13 +344,13 @@ def setup_services():
         return
 
     print_info("Setting up Services (/home/{}/{}/terracoinservices-updater)...".format(MN_USERNAME, MN_LFOLDER))
-    if os.path.isdir('/home/{}/{}/terracoinservices-updater'.format(MN_USERNAME, MN_LFOLDER)):
+    if (os.path.isdir('/home/{}/{}/terracoinservices-updater'.format(MN_USERNAME, MN_LFOLDER))):
         print_warning("Services Tools already setup...")
         return
 
     SERVICES_ENABLED = True
 
-    if COLLATERAL_ADDRESS == '':
+    if (not COLLATERAL_TX or not COLLATERAL_IDX):
         get_collateral_address()
 
     print_info("Login to https://services.terracoin.io (My Account -> Account Settings) and copy the API key")
@@ -402,7 +402,7 @@ our %masternodes = (
 
     regstatus = False
     try:
-        apicall = '{}api/v1/setappdata?api_key={}&do=add_masternode&name={}&address={}'.format(SERVICES_URL, apikey, 'MN_' + SERVER_IP.replace('.', '_'), COLLATERAL_ADDRESS)
+        apicall = '{}api/v1/setappdata?api_key={}&do=add_masternode&name={}&txid={}'.format(SERVICES_URL, apikey, 'MN_' + SERVER_IP.replace('.', '_'), COLLATERAL_TX + '-' + COLLATERAL_IDX)
         req = Request(apicall, headers=REQUEST_HDRS)
         response = urlopen(req)
         reg = json.load(response)
@@ -423,11 +423,11 @@ our %masternodes = (
 
 def setup_statuspage():
     global STATUS_ENABLED
-    if not need_credential:
+    if (not need_credential):
         return
 
     # no status page support
-    if STATUS_PAGE_GIT_URL == "":
+    if (not STATUS_PAGE_GIT_URL):
         return
 
     print_info("This will install and setup a web status page for your masternode")
@@ -436,7 +436,7 @@ def setup_statuspage():
         return
 
     print_info("Setting up Status Page Using Apache (/var/www/terracoind-status)...")
-    if os.path.isfile('/var/www/html/php/config.php'):
+    if (os.path.isfile('/var/www/html/php/config.php')):
         print_warning("Status Page already setup...")
         return
 
@@ -609,7 +609,7 @@ def end():
     mn_data = mn_base_data.format("MN_" + SERVER_IP.replace(".", "_"), SERVER_IP + ":" + str(MN_PORT), PRIVATE_KEY, collateral_tx, collateral_idx)
 
     services_data = ""
-    if SERVICES_ENABLED:
+    if (SERVICES_ENABLED):
         services_base_data = """
 
     Do not forget to register your MasterNode on {}
@@ -618,7 +618,7 @@ def end():
         services_data = services_base_data.format(SERVICES_URL)
 
     status_data = ""
-    if STATUS_ENABLED:
+    if (STATUS_ENABLED):
         status_base_data = """
     Masternode Status Page available at: http://{}/
     --------------------------------------------------
@@ -649,5 +649,5 @@ def main():
     setup_statuspage()
     end()
 
-if __name__ == "__main__":
+if (__name__ == "__main__"):
     main()
