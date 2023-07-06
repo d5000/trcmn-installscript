@@ -21,13 +21,14 @@ SERVICES_TOOLS_DIR = "terracoinservices-updater"
 SERVICES_ENABLED = False
 
 # Maybe pull this from online, setup a file in bin on terracoin.io?
-TERRACOIN_WALLET = "https://terracoin.io/bin/terracoin-core-current/terracoin-LATEST-x86_64-linux-gnu.tar.gz"
+# TERRACOIN_WALLET = "https://terracoin.io/bin/terracoin-core-current/terracoin-LATEST-x86_64-linux-gnu.tar.gz" # Not available (404)
+TERRACOIN_WALLET = "https://terracoin.io/bin/terracoin-core-current/terracoin-0.12.2-x86_64-linux-gnu.tar.gz"
 
 MN_USERNAME = "trcmn"
 MN_PORT = 13333
 MN_RPCPORT = 22350
-MN_RPCUSER = binascii.hexlify(os.urandom(6))
-MN_RPCPASS = binascii.hexlify(os.urandom(16))
+MN_RPCUSER = binascii.hexlify(os.urandom(6)).decode()
+MN_RPCPASS = binascii.hexlify(os.urandom(16)).decode()
 MN_NODELIST = ""
 
 MN_LFOLDER = ".terracoincore"
@@ -38,7 +39,7 @@ MN_CLI = "terracoin-cli"
 MN_EXPLORER = "https://insight.terracoin.io/"
 
 MN_SWAPSIZE = "2G"
-SERVER_IP = urlopen('https://api.ipify.org/').read()
+SERVER_IP = urlopen('https://api.ipify.org/').read().decode()
 DEFAULT_COLOR = "\x1b[0m"
 PRIVATE_KEY = ""
 COLLATERAL_ADDRESS = ""
@@ -92,7 +93,7 @@ def run_command(command, remove=True):
         lines = []
 
         while True:
-            line = out.stdout.readline()
+            line = out.stdout.readline().decode()
             if (not line):
                 break
 
@@ -100,7 +101,7 @@ def run_command(command, remove=True):
             remove_lines(lines)
 
             w, h = get_terminal_size()
-            lines.append(line.strip().encode('string_escape')[:w-3] + "\n")
+            lines.append(line.strip().encode('unicode_escape')[:w-3].decode() + "\n")
             if (len(lines) >= 9):
                 del lines[0]
 
@@ -147,7 +148,7 @@ def setup_wallet():
     run_command("swapon /swapfile")
 
     f = open('/etc/fstab','r+b')
-    line = '/swapfile   none    swap    sw    0   0 \n'
+    line = b'/swapfile   none    swap    sw    0   0 \n'
     lines = f.readlines()
     if (lines[-1] != line):
         f.write(line)
@@ -257,7 +258,7 @@ masternodeprivkey={}
 def crontab(job):
     p = Popen("crontab -l -u {} 2> /dev/null".format(MN_USERNAME), stderr=STDOUT, stdout=PIPE, shell=True)
     p.wait()
-    lines = p.stdout.readlines()
+    lines = [ l.decode() for l in p.stdout.readlines() ]
     job = job + "\n"
     if (job not in lines):
         print_info("Cron job doesn't exist yet, adding it to crontab")
