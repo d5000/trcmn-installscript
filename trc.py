@@ -8,7 +8,8 @@ import sys
 import time
 import math
 import json
-from urllib2 import urlopen, HTTPError, URLError, Request
+from urllib.request import urlopen, Request
+from urllib.error import HTTPError, URLError
 
 BOOTSTRAP_URL = "https://terracoin.io/bin/bootstrap/"
 SENTINEL_GIT_URL = "https://github.com/terracoin/sentinel.git"
@@ -74,7 +75,7 @@ def get_terminal_size():
         fcntl.ioctl(0, termios.TIOCGWINSZ,
         struct.pack('HHHH', 0, 0, 0, 0)))
     return w, h
-    
+
 def remove_lines(lines):
     CURSOR_UP_ONE = '\x1b[1A'
     ERASE_LINE = '\x1b[2K'
@@ -87,32 +88,32 @@ def run_command_as(user, command, remove=True):
 
 def run_command(command, remove=True):
     if remove:
-    	out = Popen(command, stderr=STDOUT, stdout=PIPE, shell=True)
-    	lines = []
-    	
-    	while True:
-    	    line = out.stdout.readline()
-    	    if (not line):
-    	        break
-    	    
-    	    # remove previous lines     
-    	    remove_lines(lines)
-    	    
-    	    w, h = get_terminal_size()
-    	    lines.append(line.strip().encode('string_escape')[:w-3] + "\n")
-    	    if (len(lines) >= 9):
-    	        del lines[0]
+        out = Popen(command, stderr=STDOUT, stdout=PIPE, shell=True)
+        lines = []
 
-    	    # print lines again
-    	    for l in lines:
-    	        sys.stdout.write('\r')
-    	        sys.stdout.write(l)
-    	    sys.stdout.flush()
+        while True:
+            line = out.stdout.readline()
+            if (not line):
+                break
 
-    	remove_lines(lines) 
-    	out.wait()
+            # remove previous lines
+            remove_lines(lines)
+
+            w, h = get_terminal_size()
+            lines.append(line.strip().encode('string_escape')[:w-3] + "\n")
+            if (len(lines) >= 9):
+                del lines[0]
+
+            # print lines again
+            for l in lines:
+                sys.stdout.write('\r')
+                sys.stdout.write(l)
+            sys.stdout.flush()
+
+        remove_lines(lines)
+        out.wait()
     else:
-	os.system(command)
+        os.system(command)
 
 def print_welcome():
     os.system('clear')
@@ -164,7 +165,7 @@ def setup_wallet():
 def get_collateral_address():
     global COLLATERAL_ADDRESS, COLLATERAL_TX, COLLATERAL_IDX
     print_info("Enter the public address that holds the 5000TRC collateral for this masternode")
-    collateral_address = raw_input("address: ")
+    collateral_address = input("address: ")
     COLLATERAL_ADDRESS = collateral_address
     print_info('Getting collateral info from explorer...')
     txs = False
@@ -173,9 +174,9 @@ def get_collateral_address():
         req = Request(apicall, headers=REQUEST_HDRS)
         response = urlopen(req)
         txs = json.load(response)
-    except HTTPError, e:
+    except HTTPError as e:
         print_error('HTTPError = ' + str(e.code))
-    except URLError, e:
+    except URLError as e:
         print_error('URLError = ' + str(e.reason))
     except Exception:
         print_error('generic exception')
@@ -203,9 +204,9 @@ def setup_masternode():
 
     if (need_credential):
         print_info("Open your wallet console (Tools => Debug Console) and create a new masternode private key: masternode genkey")
-        masternode_priv_key = raw_input("masternodeprivkey: ")
+        masternode_priv_key = input("masternodeprivkey: ")
         PRIVATE_KEY = masternode_priv_key
-        
+
         config = """rpcuser={}
 rpcpassword={}
 rpcallowip=127.0.0.1
@@ -221,15 +222,15 @@ disablewallet=1
 externalip={}:{}
 masternodeprivkey={}
 {}""".format(MN_RPCUSER, MN_RPCPASS, MN_RPCPORT, MN_PORT, SERVER_IP, MN_PORT, masternode_priv_key, MN_NODELIST)
-    
+
         # creates folder structure
         run_command_as(MN_USERNAME, "mkdir -p /home/{}/{}/".format(MN_USERNAME, MN_LFOLDER))
         run_command_as(MN_USERNAME, "touch /home/{}/{}/{}".format(MN_USERNAME, MN_LFOLDER, MN_CONFIGFILE))
-        
+
         print_info("Saving config file...")
         with open('/home/{}/{}/{}'.format(MN_USERNAME, MN_LFOLDER, MN_CONFIGFILE), 'w') as f:
             f.write(config)
-        
+
     print_info("Installing bootstrap dependencies...")
     run_command("apt-get --assume-yes install wget gpg gzip")
     print_info("Downloading blockchain bootstrap file...")
@@ -249,7 +250,7 @@ masternodeprivkey={}
         bootstrap = " -loadblock=/home/{}/bootstrap.dat".format(MN_USERNAME)
     else:
         print_warning("Verification failed, Not using bootstrap...")
-       
+
     os.system('su - {} -c "{}" '.format(MN_USERNAME, MN_DAEMON + '{} -daemon'.format(bootstrap)))
     print_warning("Masternode started syncing in the background...")
 
@@ -301,7 +302,7 @@ def setup_sentinel():
     # no sentinel support
     if (not SENTINEL_GIT_URL):
         return
-    
+
     print_info("Setting up Sentinel (/home/{}/{}/sentinel)...".format(MN_USERNAME, MN_LFOLDER))
     if (os.path.isdir('/home/{}/{}/sentinel'.format(MN_USERNAME, MN_LFOLDER))):
         print_warning("Sentinel already setup...")
@@ -339,7 +340,7 @@ def setup_services():
 
     # Ask if we want to setup services
     print_info("You will require an account at https://services.terracoin.io")
-    res = raw_input("Install Services Tools? (y/n)").lower()
+    res = input("Install Services Tools? (y/n)").lower()
     if (res == 'n' or res == 'no'):
         return
 
@@ -354,7 +355,7 @@ def setup_services():
         get_collateral_address()
 
     print_info("Login to https://services.terracoin.io (My Account -> Account Settings) and copy the API key")
-    apikey = raw_input("API key: ")
+    apikey = input("API key: ")
 
     # install dependencies
     print_info("Installing Services Tools dependencies...")
@@ -408,9 +409,9 @@ our %masternodes = (
         reg = json.load(response)
         if (reg['status'] == 'ok'):
             regstatus = True
-    except HTTPError, e:
+    except HTTPError as e:
         print_error('HTTPError = ' + str(e.code))
-    except URLError, e:
+    except URLError as e:
         print_error('URLError = ' + str(e.reason))
     except Exception:
         print_error('generic exception')
@@ -431,7 +432,7 @@ def setup_statuspage():
         return
 
     print_info("This will install and setup a web status page for your masternode")
-    res = raw_input("Install Status Page? (y/n)").lower()
+    res = input("Install Status Page? (y/n)").lower()
     if (res == 'n' or res == 'no'):
         return
 
@@ -560,7 +561,7 @@ $config = array(
 ?>""".format(MN_RPCUSER, MN_RPCPASS, MN_RPCPORT, MN_DAEMON, 'noreply@localhost')
 
     run_command("touch /var/www/html/php/config.php")
-        
+
     print_info("Saving config file...")
     with open('/var/www/html/php/config.php', 'w') as f:
         f.write(config)
@@ -580,11 +581,11 @@ $config = array(
     # try to update status page every day
     job = "* * 1 * * cd /var/www/terracoind-status && git pull {}".format(STATUS_PAGE_GIT_URL)
     crontab(job)
-    
+
 def end():
     collateral_tx = "[The transaction id of the desposit. 'masternode outputs']"
     if (COLLATERAL_TX):
-        collateral_tx = COLLATERAL_TX 
+        collateral_tx = COLLATERAL_TX
     collateral_idx = "[The transaction index of the desposit. 'masternode outputs']"
     if (COLLATERAL_IDX):
         collateral_idx = COLLATERAL_IDX
